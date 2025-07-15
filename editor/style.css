@@ -1,0 +1,221 @@
+.lexend {
+	font-family: "Lexend", serif;
+	font-optical-sizing: auto;
+	font-style: normal;
+}
+
+#top-center {
+	width: 100%;
+}
+
+.btn-new-epoch {
+	background-color: #5d5d5d;
+	color: white;
+}
+
+#left-panel,
+#workspace-panel {
+	position: absolute;
+	top: 200px;
+	left: 50px;
+	background-color: #5d5d5d;
+	color: white;
+	min-width: 200px;
+	min-height: 300px;
+}
+
+#right-panel {
+	position: absolute;
+	top: 200px;
+	left: 75%;
+	background-color: #262d3b;
+	color: white;
+	min-width: 80px;
+	min-height: 300px;
+}
+
+#shelf-panel,
+#workspace-panel {
+	position: absolute;
+	top: 200px;
+	left: 50%;
+	background-color: #5d5d5d;
+	color: white;
+	width: 300px;
+	min-height: fit-content;
+}
+#workspace-panel {
+	left: 25%;
+	width: 400px;
+}
+#shelf-panel-body ul,
+#workspace-panel-body ul {
+	max-height: 250px;
+	overflow-y: auto;
+}
+.shelf-panel-element {
+	cursor: pointer;
+}
+.shelf_entry_img,
+.workspace_entry_img {
+	width: 40px;
+	height: 40px;
+	border-radius: 0.25rem;
+	object-fit: cover;
+}
+.workspace_entry_img {
+	object-fit: contain;
+}
+
+#left-panel-header,
+#right-panel-header,
+#shelf-panel-header,
+#workspace-panel-header {
+	cursor: grab;
+	background-color: #121826;
+}
+
+#right-panel-body .btn-new-epoch {
+	display: block;
+	margin-bottom: 10px;
+}
+
+.previewBox {
+	position: absolute;
+	pointer-events: none;
+	background: rgba(0, 0, 0, 0.8);
+	color: white;
+	border-radius: 8px;
+	max-width: 200px;
+	z-index: 10;
+}
+
+.previewCanvas {
+	display: block;
+	width: 200px;
+	height: 150px;
+	border-radius: 8px;
+}
+
+.previewImg {
+	display: block;
+	max-width: 200px;
+	max-height: 200px;
+	width: auto;
+	height: auto;
+	border-radius: 8px;
+}
+
+#combinerToggle input {
+	display: none;
+}
+
+#combinerToggle input:checked + .slider {
+	background: #0d6efd;
+}
+#combinerToggle input:checked + .slider .combinerSwitch {
+	left: 45%;
+}
+
+.slider {
+	position: relative;
+	height: 34px;
+	width: 60px;
+	background: #6c757d;
+	border-radius: 34px;
+	transition: background 0.3s;
+	cursor: pointer;
+}
+
+.combinerSwitch {
+	position: absolute;
+	top: 2px;
+	left: 2px;
+	width: 30px;
+	height: 30px;
+	border-radius: 50%;
+	background: url("../res/graphicons/combiner.svg") center / cover no-repeat,
+		linear-gradient(to right, rgb(254 254 254 / 100%), rgb(254 254 254 / 100%)) center / cover
+			no-repeat;
+	transition: left 0.3s;
+}
+
+#wizard-graph {
+	width: auto;
+	height: 100%;
+	padding: 0 20px;
+}
+
+.step-circle {
+	width: 60px;
+	height: 60px;
+	border-radius: 50%;
+	border: 2px solid #6c757d;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-weight: 600;
+	transition: background 0.2s ease, color 0.2s ease;
+	cursor: pointer;
+}
+
+.step-circle img.orizontalIcon {
+	width: 80%;
+}
+.step-circle img.verticalIcon {
+	height: 80%;
+}
+.step-circle.selected-step {
+	border: 5px solid black;
+}
+
+.step-empty {
+	background: #a9a9a9;
+	color: #6c757d;
+}
+.step-partial {
+	background: #fd7e14;
+	color: #ffffff;
+}
+.step-complete {
+	background: #28a745;
+	color: #ffffff;
+}
+.step-disabled {
+	pointer-events: none;
+
+	& * {
+		opacity: 0.5;
+	}
+}
+
+.step-line {
+	flex-grow: 1;
+	margin: 2px 0;
+}
+
+.wizard-step,
+.combinerSubPath {
+	display: none;
+}
+.wizard-step.active {
+	display: block;
+}
+.combinerSubPath.active {
+	display: flex;
+}
+
+@media screen and (min-width: 768px) {
+	#top-center {
+		width: 50%;
+	}
+}
+
+@media screen and (max-width: 768px) {
+	#left-panel,
+	#workspace-panel,
+	#right-panel {
+		top: 50%;
+		left: 50%;
+	}
+}

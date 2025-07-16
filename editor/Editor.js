@@ -923,7 +923,8 @@ Editor.populateShelfPanel = () => {
 				typeSelector.options[1].disabled =
 					currShelfElement.dataset.contentType !== ShelfNode.CONTENT_TYPE.MODEL_3D;
 				typeSelector.options[3].disabled =
-					currShelfElement.dataset.contentType !== ShelfNode.CONTENT_TYPE.MODEL_3D;
+					currShelfElement.dataset.contentType !== ShelfNode.CONTENT_TYPE.MODEL_3D ||
+					currWorkspaceElement.dataset.bsType !== HeriverseNode.STRATIGRAPHIC_TYPE.SF;
 			});
 
 			modal.addEventListener("hidden.bs.modal", () => {
@@ -937,6 +938,9 @@ Editor.populateShelfPanel = () => {
 							Heriverse.CONNECTION_RULES_NODETYPES.LINK,
 							"representation"
 						);
+
+						if (!pathToCreate) return;
+
 						bsDynModal.show();
 					} else if (typeSelected === "document") {
 						Editor.setupModalSteps(
@@ -944,6 +948,9 @@ Editor.populateShelfPanel = () => {
 							Heriverse.CONNECTION_RULES_NODETYPES.LINK,
 							"document"
 						);
+
+						if (!pathToCreate) return;
+
 						bsDynModal.show();
 					} else if (typeSelected === "special_find") {
 						Editor.setupModalSteps(
@@ -951,6 +958,9 @@ Editor.populateShelfPanel = () => {
 							Heriverse.CONNECTION_RULES_NODETYPES.LINK,
 							"special_find"
 						);
+
+						if (!pathToCreate) return;
+
 						bsDynModal.show();
 					}
 				}
@@ -1731,6 +1741,8 @@ function addShelfResourceToGraph() {
 			Heriverse.CONNECTION_RULES_NODETYPES.STRATIGRAPHIC,
 			ShelfNode.CONTENT_TYPE.MODEL_3D
 		);
+
+		if (!pathToCreate) return;
 
 		currentModal = document.getElementById("insertDocumentModal");
 
@@ -4192,6 +4204,7 @@ Editor.setupModalSteps = (startNodeType, endNodeType, rmType = "") => {
 		updateButtons();
 	} else {
 		alert("Non è possibile creare un path.");
+		return;
 	}
 };
 

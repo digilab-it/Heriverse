@@ -876,7 +876,7 @@ UI.buildRelationsManagement = (containerSelector) => {
 	const container = document.querySelector(containerSelector);
 	let html =
 		"<h5 class='mt-2 mb-1 p-1 text-center scene-controls-panel-subtitle' data-i18n='RELATIONS_CHECK_SECTION_TITLE' id='relationCheckSectionTitle'>Relazioni da disegnare</h5>";
-	html += "<div class='d-flex flex-column align-items-start'>";
+	html += "<div id='scene-controls-relations' class='d-flex flex-column align-items-start'>";
 	Object.values(HeriverseNode.RELATIONS).forEach((relationName, index) => {
 		const relationLabel = HeriverseNode.RELATION_LABELS[relationName];
 		html += `<label id="relationCheckbox-${index}-label" for="relationCheckbox-${index}" class="fs-6 text-wrap">`;

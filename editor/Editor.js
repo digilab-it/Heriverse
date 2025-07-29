@@ -15,6 +15,8 @@ let epoch = null;
 let lastWorkspaceX, lastWorkspaceY;
 let currShelfElement, currWorkspaceElement, currSelectedNode;
 
+Editor.semanticShapeDrawingActive = false;
+
 let addFromScene = false;
 
 let setupModals = false,
@@ -589,20 +591,21 @@ Editor.modal_steps = [
 				element_type: HeriverseNode.TYPE.SEMANTIC_SHAPES,
 			},
 			{
-				id: Heriverse.CONNECTION_RULES_NODETYPES.SEMANTIC_SHAPE + "Name",
-				label: "Nome",
-				i18n_label: "NAME_LABEL",
-				type: "text",
-				required: true,
-				element_type: HeriverseNode.TYPE.SEMANTIC_SHAPES,
-			},
-			{
 				id: Heriverse.CONNECTION_RULES_NODETYPES.SEMANTIC_SHAPE + "Description",
 				label: "Descrizione",
 				i18n_label: "DESCRIPTION_LABEL",
 				type: "textarea",
 				required: true,
 				element_type: HeriverseNode.TYPE.SEMANTIC_SHAPES,
+			},
+			{
+				id: Heriverse.CONNECTION_RULES_NODETYPES.SEMANTIC_SHAPE + "Relate",
+				label: "Seleziona nodo stratigrafico",
+				i18n_label: "STRATIGRAPHIC_NODE_SELECT",
+				type: "nodeSelector",
+				required: true,
+				element_type: HeriverseNode.TYPE.SEMANTIC_SHAPES,
+				valuesType: HeriverseNode.NODE_TYPE.STRATIGRAPHIC,
 			},
 		],
 	},
@@ -729,6 +732,10 @@ window.Editor = Editor;
 Editor.currentOperation;
 Editor.currObj;
 Editor.EditorUI = EditorUI;
+
+Editor.semSHAPE;
+Editor.semSHAPEShape;
+
 Editor.init = () => {
 	if (!setupPanels) {
 		Editor.setupEventHandlers();
@@ -2266,12 +2273,20 @@ Editor.setupShelfResManageButtons = () => {
 
 	document.getElementById("saveGraphState").addEventListener("click", () => {
 		if (confirm("Vuoi salvare le modifiche sul grafo?")) {
+			$("#idLoader").show();
 			if (currSelectedNode) {
 				Heriverse.gizmoControls.detach(currSelectedNode);
 			}
 			currSelectedNode = null;
+			if (Editor.semanticShapeDrawingActive) ATON.fire("SemanticShapeDrawingMode", true);
 			Editor.send(Heriverse.ResourceScene);
 		}
+	});
+	document.getElementById("exportGraphState").addEventListener("click", () => {
+		HeriverseImportExport.exportResourceJSON();
+	});
+	document.getElementById("exportSemanticShape").addEventListener("click", () => {
+		Editor.setupExportSemShapeModal();
 	});
 	document.getElementById("removeFromScene").addEventListener("click", () => {
 		if (currSelectedNode.userData.addedToGraph)
@@ -2304,6 +2319,81 @@ Editor.setupShelfResManageButtons = () => {
 			$("#insertShelfResourceModal").modal("show");
 		}
 	});
+};
+
+const semShapeToExport = {};
+const namePrefix = "Shape for ";
+function selectAllShapes() {
+	const modal = document.getElementById("semanticShapeDownloadModal");
+	const checkboxes = modal.querySelectorAll(".semShapeCheckbox:not(.selectAllSemanticCheck)");
+
+	checkboxes.forEach((checkbox) => {
+		checkbox.checked = this.checked;
+		const currSemShape = Heriverse.currEM.EMnodes[checkbox.dataset.id];
+		if (this.checked) {
+			semShapeToExport[currSemShape.id] = ATON.getSemanticNode(
+				currSemShape.name.split(namePrefix)[1]
+			);
+		} else {
+			delete semShapeToExport[currSemShape.id];
+		}
+	});
+}
+function selectSemShape() {
+	const currSemShape = Heriverse.currEM.EMnodes[this.dataset.id];
+	const modal = document.getElementById("semanticShapeDownloadModal");
+	const selectAllCheckbox = modal.querySelector(".selectAllSemanticCheck");
+	const checkboxes = modal.querySelectorAll(".semShapeCheckbox:not(.selectAllSemanticCheck)");
+
+	if (semShapeToExport[currSemShape.id]) {
+		delete semShapeToExport[currSemShape.id];
+	} else
+		semShapeToExport[currSemShape.id] = ATON.getSemanticNode(
+			currSemShape.name.split(namePrefix)[1]
+		);
+
+	selectAllCheckbox.checked = checkboxes.length === Object.values(semShapeToExport).length;
+}
+function exportSemShapes() {
+	const modal = document.getElementById("semanticShapeDownloadModal");
+	const bsModal = bootstrap.Modal.getOrCreateInstance(modal);
+
+	HeriverseImportExport.exportNodesAsZip(semShapeToExport);
+
+	bsModal.hide();
+}
+Editor.setupExportSemShapeModal = () => {
+	if (!Object.values(Heriverse.currEM.proxyNodes).length) {
+		alert("Non sono presenti maschere semantiche.");
+		return;
+	}
+	const modal = document.getElementById("semanticShapeDownloadModal");
+	const bsModal = bootstrap.Modal.getOrCreateInstance(modal);
+	const modalBody = modal.querySelector(".modal-body");
+
+	let html = `<ul class="list-group">`;
+	html += `<li class="list-group-item"><input class="selectAllSemanticCheck semShapeCheckbox" type="checkbox" /> Seleziona tutto </li>`;
+	Object.values(Heriverse.currEM.proxyNodes).forEach((proxy) => {
+		const semShape = proxy.shape;
+
+		html += `<li class="list-group-item"><input class="semShapeCheckbox" type="checkbox" data-id="${semShape.id}" data-name="${semShape.name}"/> ${semShape.name}</li>`;
+	});
+	html += "</ul>";
+
+	modalBody.innerHTML = html;
+
+	$(document)
+		.off("change", ".selectAllSemanticCheck", selectAllShapes)
+		.on("change", ".selectAllSemanticCheck", selectAllShapes);
+	$(document)
+		.off("change", ".semShapeCheckbox:not(.selectAllSemanticCheck)", selectSemShape)
+		.on("change", ".semShapeCheckbox:not(.selectAllSemanticCheck)", selectSemShape);
+
+	$(document)
+		.off("click", "#exportSSBtn", exportSemShapes)
+		.on("click", "#exportSSBtn", exportSemShapes);
+
+	bsModal.show();
 };
 
 Editor.addDocumentToShelf = (id, name, description, url, file) => {
@@ -2354,7 +2444,15 @@ Editor.addRepresentationModel = (id, name, description, url, file, shelf = false
 		data.url_type = "3d_model";
 		data.description = description;
 	}
-	Editor.addNode(id, HeriverseNode.NODE_TYPE.REPRESENTATION_MODEL, name, description, data, shelf);
+	Editor.addNode(
+		id,
+		HeriverseNode.NODE_TYPE.REPRESENTATION_MODEL,
+		name,
+		description,
+		data,
+		shelf ? "shelf" : Heriverse.currGraphId,
+		shelf
+	);
 };
 
 Editor.addEpoch = (id, name, description, start_time, end_time, color, min_y, max_y) => {
@@ -2365,7 +2463,15 @@ Editor.addEpoch = (id, name, description, start_time, end_time, color, min_y, ma
 	data.min_y = min_y;
 	data.max_y = max_y;
 
-	Editor.addNode(id, HeriverseNode.NODE_TYPE.EPOCH, name, description, data);
+	Editor.addNode(
+		id,
+		HeriverseNode.NODE_TYPE.EPOCH,
+		name,
+		description,
+		data,
+		Heriverse.currGraphId,
+		false
+	);
 };
 
 Editor.addAuthor = (id, name, description, orcid, author_name, author_surname) => {
@@ -2373,49 +2479,106 @@ Editor.addAuthor = (id, name, description, orcid, author_name, author_surname) =
 	data.orcid = orcid;
 	data.name = author_name;
 	data.surname = author_surname;
-	Editor.addNode(id, HeriverseNode.NODE_TYPE.AUTHOR, name, description, data);
+	Editor.addNode(
+		id,
+		HeriverseNode.NODE_TYPE.AUTHOR,
+		name,
+		description,
+		data,
+		Heriverse.currGraphId,
+		false
+	);
 };
 
 Editor.addStratigraphic = (id, type, name, description) => {
 	let data = {};
 	let node = new HeriverseNode();
 	node.setNodeInfo(id, type, name, description, data);
-	Heriverse.currMG.newStratigraphicNode(ndode);
+	Heriverse.currMG.newStratigraphicNode(node);
 	Heriverse.Scene.multigraph = Heriverse.currMG.json;
 	Heriverse.ResourceScene.resource_json.multigraph = Heriverse.currMG.json;
-	Editor.send(Heriverse.ResourceScene);
+
+	Heriverse.setScene();
 };
 
 Editor.addGroup = (id, name, description) => {
 	let data = {};
-	Editor.addNode(id, HeriverseNode.NODE_TYPE.GROUP, name, description, data);
+	Editor.addNode(
+		id,
+		HeriverseNode.NODE_TYPE.GROUP,
+		name,
+		description,
+		data,
+		Heriverse.currGraphId,
+		false
+	);
 };
 
 Editor.addProperty = (id, name, description) => {
 	let data = {};
-	Editor.addNode(id, HeriverseNode.NODE_TYPE.PROPERTY, name, description, data);
+	Editor.addNode(
+		id,
+		HeriverseNode.NODE_TYPE.PROPERTY,
+		name,
+		description,
+		data,
+		Heriverse.currGraphId,
+		false
+	);
 };
 
 Editor.addDocument = (id, name, description) => {
 	let data = {};
-	Editor.addNode(id, HeriverseNode.NODE_TYPE.DOCUMENT, name, description, data);
+	Editor.addNode(
+		id,
+		HeriverseNode.NODE_TYPE.DOCUMENT,
+		name,
+		description,
+		data,
+		Heriverse.currGraphId,
+		false
+	);
 };
 
 Editor.addExtractor = (id, name, description) => {
 	let data = {};
-	Editor.addNode(id, HeriverseNode.NODE_TYPE.EXTRACTOR, name, description, data);
+	Editor.addNode(
+		id,
+		HeriverseNode.NODE_TYPE.EXTRACTOR,
+		name,
+		description,
+		data,
+		Heriverse.currGraphId,
+		false
+	);
 };
 
 Editor.addCombiner = (id, name, description) => {
 	let data = {};
-	Editor.addNode(id, HeriverseNode.NODE_TYPE.COMBINER, name, description, data);
+	Editor.addNode(
+		id,
+		HeriverseNode.NODE_TYPE.COMBINER,
+		name,
+		description,
+		data,
+		Heriverse.currGraphId,
+		false
+	);
 };
 
 Editor.addLink = (id, name, description, url, file, url_type, data_description) => {
 	let data = {};
 	(data.url = url), (data.url_type = url_type);
 	data.description = data_description;
-	Editor.addNode(id, HeriverseNode.NODE_TYPE.LINK, name, description, data);
+	Editor.addNode(
+		id,
+		HeriverseNode.NODE_TYPE.LINK,
+		name,
+		description,
+		data,
+		Heriverse.currGraphId,
+		false
+	);
 };
 
 Editor.addSemantiShape = (
@@ -2431,24 +2594,53 @@ Editor.addSemantiShape = (
 	data.url = url;
 	data.convexshapes = convexshapes;
 	data.spheres = spheres;
-	Editor.addNode(id, HeriverseNode.NODE_TYPE.SEMANTIC_SHAPE, name, description, data);
+
+	Editor.addNode(
+		id,
+		HeriverseNode.NODE_TYPE.SEMANTIC_SHAPE,
+		name,
+		description,
+		data,
+		Heriverse.currGraphId,
+		false
+	);
 };
 
-Editor.addNode = (id, type, name, description, data, shelf = false) => {
+Editor.addNode = (id, type, name, description, data, graph = "shelf", shelf = false) => {
 	let node;
 	if (shelf) {
 		Heriverse.shelf.addShelfNode(id, type, name, data);
-		Heriverse.Scene.multigraph.graphs.shelf = Heriverse.shelf.json.graphs.shelf;
-		Heriverse.ResourceScene.resource_json.multigraph.graphs.shelf =
-			Heriverse.shelf.json.graphs.shelf;
+		Heriverse.Scene.multigraph.graphs[graph] = Heriverse.shelf.json.graphs[graph];
+		Heriverse.ResourceScene.resource_json.multigraph.graphs[graph] =
+			Heriverse.shelf.json.graphs[graph];
 	} else {
+		let default_authors = Heriverse.currMG.json.graphs[graph].defaults
+			? Heriverse.currMG.json.graphs[graph].defaults.authors
+			: [];
+		let default_license = Heriverse.currMG.json.graphs[graph].defaults
+			? Heriverse.currMG.json.graphs[graph].defaults.license
+			: "";
+		let default_embargo_until = Heriverse.currMG.json.graphs[graph].defaults
+			? Heriverse.currMG.json.graphs[graph].defaults.embargo_until
+			: "";
 		node = new HeriverseNode();
-		node.setNodeInfo(id, type, name, description, data);
+		node.setNodeInfo(
+			id,
+			type,
+			name,
+			description,
+			data,
+			default_license,
+			default_authors,
+			default_embargo_until,
+			graph
+		);
 		Heriverse.currMG.newNode(node);
 		Heriverse.Scene.multigraph = Heriverse.currMG.json;
 		Heriverse.ResourceScene.resource_json.multigraph = Heriverse.currMG.json;
 	}
-	Editor.send(Heriverse.ResourceScene, shelf);
+	// Heriverse.loadEM(null, false, true);
+	Heriverse.refresh(Heriverse.ResourceScene);
 };
 
 Editor.addNodeToEpoch = () => {
@@ -2519,11 +2711,58 @@ Editor.addEdge = () => {
 	Editor.send(Heriverse.ResourceScene);
 };
 
+Editor.applyFreeSemShape = () => {
+	Editor.setupEditCreateModal(Heriverse.CONNECTION_RULES_NODETYPES.SEMANTIC_SHAPE);
+
+	const modal = document.getElementById("createEditNode");
+	bootstrap.Modal.getOrCreateInstance(modal).show();
+};
+
 Editor.setupEventHandlers = () => {
 	ATON.on("goToPeriodPerformed", (e) => {
 		Editor.epoch = Heriverse.currPeriodName;
 	});
+	ATON.on("SemanticShapeDrawingMode", (b) => {
+		const startDrawButton = document.getElementById("startSemanticShapeDrawing");
+		const finalizeDrawButton = document.getElementById("finalizeSemanticShapeDrawing");
+
+		if (!b) {
+			Editor.applyFreeSemShape();
+		} else {
+			if (Editor.semanticShapeDrawingActive) {
+				Editor.semanticShapeDrawingActive = !b;
+				ATON.SemFactory.stopCurrentConvex();
+				startDrawButton.classList.remove("active");
+			} else {
+				Editor.semanticShapeDrawingActive = b;
+				finalizeDrawButton.disabled = !Editor.semanticShapeDrawingActive;
+				startDrawButton.classList.add("active");
+			}
+			finalizeDrawButton.disabled = !Editor.semanticShapeDrawingActive;
+		}
+	});
 	ATON.on("EMLoaded", (e) => {});
+	ATON.on("Tap", (e) => {
+		if (Editor.semanticShapeDrawingActive && Heriverse.MODE === Heriverse.MODETYPES.EDITOR) {
+			const buttonFinalizeShapeBox = document
+				.getElementById("finalizeSemanticShapeDrawing")
+				.getBoundingClientRect();
+
+			let clicked_object = ATON._rcScene.intersectObjects(ATON._rootVisible.children, true)[0];
+
+			const isInFinalizeButton =
+				Heriverse.mousePosition.x >= buttonFinalizeShapeBox.left &&
+				Heriverse.mousePosition.x <= buttonFinalizeShapeBox.right &&
+				Heriverse.mousePosition.y >= buttonFinalizeShapeBox.top &&
+				Heriverse.mousePosition.y <= buttonFinalizeShapeBox.bottom;
+
+			if (!isInFinalizeButton) {
+				let clicked_point = clicked_object.point;
+				// ATON.SemFactory.addSurfaceConvexPoint(0.01);
+				ATON.SemFactory.addConvexPoint(clicked_point);
+			}
+		}
+	});
 };
 
 Editor.delete3DObject = (id) => {
@@ -2598,7 +2837,7 @@ Editor.send = (E, shelf_update = false, attempt = false) => {
 
 	$.ajax({
 		type: "PUT",
-		url: Utils.host + "heriverse/scene",
+		url: Utils.baseHost + "heriverse/scene",
 		data: JSON.stringify(E),
 		contentType: "application/json",
 		headers: { token: sessionStorage.getItem("access_token") },
@@ -2639,7 +2878,8 @@ Editor.uploadResource = (files, contentType = "") => {
 
 	$.ajax({
 		type: "POST",
-		url: Utils.host + "upload",
+		url: Utils.baseHost + "heriverse/upload",
+		headers: { authServer: "DIGILAB" },
 		data: formData,
 		processData: false,
 		contentType: false,
@@ -2719,16 +2959,24 @@ function compileFieldsToEdit(node, containerId) {
 	});
 }
 function saveNodeInformation() {
+	$("#idLoader").show();
+
 	const modal = this.closest(".modal");
-	const nodeId = modal.querySelector(".modal-body").dataset.nodeid;
-	const node = Heriverse.currEM.EMnodes[nodeId];
+	const modalBody = modal.querySelector(".modal-body");
+	const nodeId = modalBody.dataset.nodeid;
+	const nodeType = Heriverse.getNodeTypeByCRNodeType(modalBody.dataset.type);
+	const node = nodeId ? Heriverse.currEM.EMnodes[nodeId] : null;
+
+	console.log("NODE TYPE", nodeType);
+
 	let newName = "",
-		newDescription = "",
+		newDescription = node ? node.description : "",
 		newData = {},
 		newType = "",
-		newLicense = node.license,
-		newAuthors = node.authors,
-		newEmbargo = node.embargo_until;
+		newLicense = node ? node.license : "",
+		newAuthors = node ? node.authors : "",
+		newEmbargo = node ? node.embargo_until : "",
+		newGraph = node ? node.graph : Heriverse.currGraphId;
 
 	const inputForms = modal
 		.querySelector(".modal-body")
@@ -2737,15 +2985,53 @@ function saveNodeInformation() {
 	[...inputForms].forEach((inputForm) => {
 		if (inputForm.id.includes("Name")) newName = inputForm.value;
 		else if (inputForm.id.includes("Description")) {
-			if (node.type === HeriverseNode.NODE_TYPE.LINK) newData["description"] = inputForm.value;
+			if (
+				(node && node.type === HeriverseNode.NODE_TYPE.LINK) ||
+				nodeType === HeriverseNode.NODE_TYPE.LINK
+			)
+				newData["description"] = inputForm.value;
 			else newDescription = inputForm.value;
 		} else if (inputForm.id.includes("TypeSelect")) newType = inputForm.value;
-		else if (inputForm.id.includes("Color")) newData["color"] = inputForm.value;
-		else if (inputForm.id.includes("StartTime")) newData["start_time"] = inputForm.value;
-		else if (inputForm.id.includes("EndTime")) newData["end_time"] = inputForm.value;
-		else if (inputForm.id.includes("MinY")) newData["min_y"] = inputForm.value;
-		else if (inputForm.id.includes("MaxY")) newData["max_y"] = inputForm.value;
-		else if (inputForm.id.includes("Info")) {
+		else if (inputForm.id.includes("Relate")) {
+			if (
+				(node && node.type === HeriverseNode.NODE_TYPE.SEMANTIC_SHAPE) ||
+				nodeType === HeriverseNode.NODE_TYPE.SEMANTIC_SHAPE
+			) {
+				const stratOptionSelected = inputForm.options[inputForm.selectedIndex];
+				const stratigraphicNode = Heriverse.currEM.EMnodes[stratOptionSelected.dataset.id];
+
+				ATON.SemFactory.completeConvexShape(stratigraphicNode.name);
+
+				newName = namePrefix + stratigraphicNode.name;
+				newData = {
+					url: "",
+					convexshape: ATON.getSemanticNode(stratigraphicNode.name).children[0],
+					// convexshapes: ATON.SemFactory.convexPoints,
+					speres: [],
+				};
+				newLicense = stratigraphicNode.license;
+				newAuthors = stratigraphicNode.authors;
+				newEmbargo = stratigraphicNode.embargo_until;
+				newGraph = stratigraphicNode.graph;
+
+				ATON.SemFactory.stopCurrentConvex();
+				Editor.semanticShapeDrawingActive = false;
+				document.getElementById("finalizeSemanticShapeDrawing").disabled =
+					!Editor.semanticShapeDrawingActive;
+				if (document.getElementById("startSemanticShapeDrawing").classList.contains("active"))
+					document.getElementById("startSemanticShapeDrawing").classList.remove("active");
+			}
+		} else if (inputForm.id.includes("Color")) {
+			newData["color"] = inputForm.value;
+		} else if (inputForm.id.includes("StartTime")) {
+			newData["start_time"] = inputForm.value;
+		} else if (inputForm.id.includes("EndTime")) {
+			newData["end_time"] = inputForm.value;
+		} else if (inputForm.id.includes("MinY")) {
+			newData["min_y"] = inputForm.value;
+		} else if (inputForm.id.includes("MaxY")) {
+			newData["max_y"] = inputForm.value;
+		} else if (inputForm.id.includes("Info")) {
 			newName = inputForm.querySelector("#propType-dropdownMenu").textContent;
 
 			const descComponents = inputForm.querySelectorAll(
@@ -2773,25 +3059,43 @@ function saveNodeInformation() {
 	}
 	const updatedNode = new HeriverseNode();
 	updatedNode.setNodeInfo(
-		nodeId.split("_")[1],
-		newType || node.type,
+		node ? node.id : null,
+		newType || nodeType || node.type,
 		newName || node.name,
-		newDescription || node.description,
-		Object.values(newData).length ? newData : node.data,
+		newDescription,
+		Object.values(newData).length ? newData : node && node.data ? node.data : {},
 		newLicense,
 		newAuthors,
 		newEmbargo,
-		node.graph
+		newGraph
 	);
+
+	console.log("UPDATED NODE", updatedNode);
 
 	Heriverse.currMG.newNode(updatedNode);
 
+	if (modalBody.dataset.newNode) {
+		if (nodeType === HeriverseNode.NODE_TYPE.SEMANTIC_SHAPE) {
+			const stratOptionSelected = inputForms[1].options[inputForms[1].selectedIndex];
+			const stratigraphicNode = Heriverse.currEM.EMnodes[stratOptionSelected.dataset.id];
+
+			Heriverse.currMG.newEdgeFromIds(
+				null,
+				stratigraphicNode.id,
+				updatedNode.id,
+				HeriverseNode.RELATIONS.HAS_SEMANTIC_SHAPE
+			);
+		}
+	}
+
 	Heriverse.Scene.multigraph = Heriverse.currMG.json;
 	Heriverse.ResourceScene.resource_json.multigraph = Heriverse.currMG.json;
+	console.log("HERIVERSE CURRMG JSON", Heriverse.currMG.json);
+
+	// Heriverse.loadEM(null, false, true, Heriverse.currMG.json);
+	Heriverse.setScene();
 
 	bootstrap.Modal.getOrCreateInstance(document.getElementById(modal.id)).hide();
-
-	Heriverse.loadEM(null, false, true);
 }
 Editor.setupEditCreateModal = (nodeType, node = null, containerId = "createEditNode") => {
 	const modal = document.getElementById(containerId);
@@ -2808,6 +3112,9 @@ Editor.setupEditCreateModal = (nodeType, node = null, containerId = "createEditN
 	modalTitle.dataset.i18n = modalByType.i18n_label;
 
 	if (node) modalBody.dataset.nodeid = node.id;
+	else modalBody.dataset.newNode = true;
+	modalBody.dataset.type = nodeType;
+
 	let bodyContent = "";
 	modalByType.fields.forEach((field) => {
 		if (
@@ -3351,12 +3658,14 @@ function generateFieldHTML(field, lastFieldIndex = 0) {
 
 	if (field.type === "select") {
 		html += `<select class="form-select mb-4 ${
-			field.id.includes("TypeSelect") ? "" : "existing-node-selector"
-		}" onchange="Editor.manageOtherInputs" id="${field.id}${
-			lastFieldIndex > 0 ? "-" + lastFieldIndex : ""
-		}" aria-labelledby="${field.id}Label${
-			lastFieldIndex > 0 ? "-" + lastFieldIndex : ""
-		}" data-type="${field.element_type}">`;
+			field.id.includes("TypeSelect") || field.id.includes("Relate") ? "" : "existing-node-selector"
+		}" ${
+			field.id.includes("TypeSelect") || field.id.includes("Relate")
+				? ""
+				: 'onchange="Editor.manageOtherInputs"'
+		} id="${field.id}${lastFieldIndex > 0 ? "-" + lastFieldIndex : ""}" aria-labelledby="${
+			field.id
+		}Label${lastFieldIndex > 0 ? "-" + lastFieldIndex : ""}" data-type="${field.element_type}">`;
 		html += `<option value="" data-i18n="SELECT_AN_ELEMENT" selected>Seleziona un elemento...</option>`;
 		if (field.options) field.options.forEach((o) => (html += `<option value="${o}">${o}</option>`));
 		else if (field.element_type) {
@@ -3440,6 +3749,19 @@ function generateFieldHTML(field, lastFieldIndex = 0) {
 		if (field.values && field.values.length > 0) {
 			field.values.forEach((value) => {
 				html += `<option value=${value}>${value}</option>`;
+			});
+		}
+		html += `</select>`;
+	} else if (field.type === "nodeSelector") {
+		html += `<select id="${field.id}${
+			lastFieldIndex > 0 ? "-" + lastFieldIndex : ""
+		}" class="inputNodeSelector" aria-labelledby="${field.id}Label${
+			lastFieldIndex > 0 ? "-" + lastFieldIndex : ""
+		}" data-type="${field.element_type}">`;
+		if (field.valuesType === HeriverseNode.NODE_TYPE.STRATIGRAPHIC) {
+			Object.values(Heriverse.currEM.EMnodes).forEach((node) => {
+				if (!HeriverseGraph.stratigraphicTypes.includes(node.type)) return;
+				html += `<option value=${node.name} data-id=${node.id}>${node.name}</option>`;
 			});
 		}
 		html += `</select>`;
@@ -3697,6 +4019,7 @@ function buildWizardSummary() {
 }
 
 function finalizePathCreation() {
+	$("#idLoader").show();
 	let default_authors = Heriverse.currMG.json.graphs[Heriverse.currGraphId].defaults.authors;
 	let default_license = Heriverse.currMG.json.graphs[Heriverse.currGraphId].defaults.license;
 	let default_embargo_until =
@@ -3716,7 +4039,7 @@ function finalizePathCreation() {
 			stepType: actualStep.dataset.type,
 			nodeSelector: actualStep.querySelector("select[onchange='Editor.manageOtherInputs']"),
 			inputList: actualStep.querySelectorAll(
-				"input[type=text], input[type=color], input[type=number], input[type=file], textarea, select.inputTypeSelector"
+				"input[type=text], input[type=color], input[type=number], input[type=file], textarea, select.inputTypeSelector, select.inputNodeSelector"
 			),
 			propertyDesc: actualStep.querySelectorAll(
 				"div#" +
@@ -3999,6 +4322,23 @@ function finalizePathCreation() {
 							default_authors,
 							default_embargo_until
 						);
+					} else if (graphNodeType === HeriverseNode.NODE_TYPE.SEMANTIC_SHAPE) {
+						const stratigraphicOptionSelected =
+							inputsBySteps[1].options[inputsBySteps[1].selectedIndex];
+						const stratigraphicNode =
+							Heriverse.currEM.EMnodes[stratigraphicOptionSelected.dataset.id];
+
+						concreteNode.setNodeInfo(
+							stratigraphicNode.name + "_shape",
+							nodeType,
+							"Shape for " + stratigraphicNode.name,
+							inputsBySteps[0].value,
+							{ url: "", convexshapes: ATON.SemFactory.convexPoints, spheres: [] },
+							default_license,
+							default_authors,
+							default_embargo_until,
+							stratigraphicNode.graph
+						);
 					} else {
 						concreteNode.setNodeInfo(
 							null,
@@ -4136,7 +4476,8 @@ function finalizePathCreation() {
 
 	bootstrap.Modal.getOrCreateInstance(document.getElementById("dynamicModalPathCreation")).hide();
 
-	Heriverse.loadEM("", false, true);
+	// Heriverse.loadEM("", false, true);
+	Heriverse.setScene();
 }
 
 Editor.setupModalSteps = (startNodeType, endNodeType, rmType = "") => {

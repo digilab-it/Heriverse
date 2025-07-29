@@ -380,36 +380,37 @@ Create.createNewSKG = () => {
 	return Create.createKGraph("Prova nuovo grafo");
 };
 
-Create.createKGraph = (title) => {
-	return {
-		kgraph: {
-			context: {
-				epochs: {},
-			},
-			graphs: {
-				graph1: {
-					name: title,
-					description: "",
-					data: {
-						geo_position: {
-							epsg: "",
-							shift_x: "0",
-							shift_y: "0",
-							shift_z: "0",
-						},
-					},
-					nodes: {},
-					edges: {
-						line: [],
-						dashed: [],
-						dotted: [],
-						double_line: [],
-						dashed_dotted: [],
-					},
-				},
-			},
+Create.createKGraph = (
+	title,
+	description = "",
+	license = "",
+	authors = [],
+	embargo_until = "",
+	panorama = ""
+) => {
+	const randomId = crypto.randomUUID();
+
+	const kgraph = {
+		context: {
+			epochs: {},
 		},
+		graphs: {},
 	};
+
+	kgraph.graphs[randomId] = {
+		name: title,
+		description: description,
+		defaults: {},
+		nodes: {},
+		edges: {},
+	};
+
+	kgraph.graphs[randomId].defaults["license"] = license;
+	kgraph.graphs[randomId].defaults["authors"] = authors;
+	kgraph.graphs[randomId].defaults["embargo_until"] = embargo_until;
+	kgraph.graphs[randomId].defaults["panorama"] = panorama;
+
+	return kgraph;
 };
 
 Create.uploadZip = (zip) => {
@@ -421,7 +422,8 @@ Create.uploadZip = (zip) => {
 
 	$.ajax({
 		type: "POST",
-		url: Utils.baseHost + "upload-heriverse-zip",
+		url: Utils.baseHost + "heriverse/upload-heriverse-zip",
+		headers: { authServer: "DIGILAB" },
 		data: formData,
 		processData: false,
 		contentType: false,
@@ -446,7 +448,8 @@ Create.uploadResource = (files) => {
 
 	$.ajax({
 		type: "POST",
-		url: Utils.baseHost + "upload",
+		url: Utils.baseHost + "heriverse/upload",
+		headers: { authServer: "DIGILAB" },
 		data: formData,
 		processData: false,
 		contentType: false,
